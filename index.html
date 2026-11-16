@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Lockdown on Meridian Station · VR SQL Escape Room</title>
 <link rel="stylesheet" href="css/app.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js", "three/addons/": "./vendor/addons/" } }</script>
 </head>
 <body>
 
@@ -41,6 +42,8 @@
       <button class="primary alt hidden" id="btnVR" disabled>Enter VR headset mode</button>
       <button class="ghost hidden" id="btnAR" disabled title="Experimental: keeps a window onto your real desk so you can see a physical keyboard">Enter VR with keyboard window</button>
     </div>
+    <div class="row" style="margin-top:.8rem"><label for="gfx" class="kbd">Graphics</label>
+      <select id="gfx"><option value="auto">Auto</option><option value="2">High: computer with a graphics card, or headset linked to one</option><option value="1">Medium: Quest 3 on its own</option><option value="0">Low: Quest 2 on its own, older laptops</option></select></div>
     <p class="note" id="lNote">No headset? “Play on this screen” gives you the same room: drag to look around, click to interact.</p>
   </div>
 </div>
@@ -50,7 +53,7 @@
   <div class="brand"><span class="eyebrow" id="bCourse"></span><b id="bRoom"></b></div>
   <nav id="track" aria-label="Status tracker"></nav>
   <div class="right">
-    <span id="clock" title="Time since you started">00:00</span>
+    <span id="fps" class="kbd hidden"></span><span id="clock" title="Time since you started">00:00</span>
     <select id="jump" class="hidden" title="Instructor: jump to a module"></select>
     <button class="ghost sm" id="btnMute" title="Sound on/off">Sound: on</button>
     <button class="ghost sm" id="btnHelp">How to play</button>

@@ -1,0 +1,29 @@
+{
+  "models": {},
+  "baked": {
+    "r1": {
+      "file": "r1.jpg",
+      "intensity": 1
+    },
+    "r2": {
+      "file": "r2.jpg",
+      "intensity": 1
+    },
+    "r3": {
+      "file": "r3.jpg",
+      "intensity": 1
+    },
+    "r4": {
+      "file": "r4.jpg",
+      "intensity": 1.5
+    },
+    "r5": {
+      "file": "r5.jpg",
+      "intensity": 1.5
+    },
+    "rb": {
+      "file": "rb.jpg",
+      "intensity": 1
+    }
+  }
+}

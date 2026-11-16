@@ -2,7 +2,7 @@
 // Contains no answers: puzzles and result fingerprints arrive encrypted in data/lab.json.
 import * as THREE from '../vendor/three.module.min.js';
 import { check, cell, sha } from './canon.js';
-import { buildSpace, buildRoom } from './scenery.js';
+import { buildSpace, buildRoom, setQuality, loadManifest, setBakedCallback, Q } from './scenery.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -113,12 +113,40 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 4000);
 camera.rotation.order = 'YXZ'; camera.position.set(0, 1.6, 0);
 const rig = new THREE.Group(); rig.add(camera); scene.add(rig);
-let yaw = 0, pitch = 0;
-function resize() { if (renderer.xr.isPresenting) return; renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+let yaw = 0, pitch = 0, composer = null, bloom = null;
+function resize() { if (renderer.xr.isPresenting) return; renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); if (composer) composer.setSize(innerWidth, innerHeight); }
 addEventListener('resize', resize); resize();
 
 const env = { THREE, anim: [] };
+/* graphics quality: 2 High (PC GPU), 1 Medium (Quest 3 standalone), 0 Low (Quest 2 standalone) */
+function autoLevel() { const ua = navigator.userAgent; if (/Quest 3|Quest Pro/i.test(ua)) return 1; if (/OculusBrowser|Quest|Android|iPhone|iPad|Mobile/i.test(ua)) return 0; return 2; }
+let gfxPref = 'auto'; try { gfxPref = localStorage.getItem('meridian.gfx') || 'auto'; } catch (e) {}
+const levelOf = pref => pref === 'auto' ? autoLevel() : Number(pref);
+setQuality(levelOf(gfxPref));
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const pmrem = new THREE.PMREMGenerator(renderer); let envRT = null, cubeRT = null, cubeCam = null;
+function applyQuality() {
+  renderer.shadowMap.enabled = Q.level === 2; renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q.level === 2 ? 2 : 1.5));
+  scene.environmentIntensity = .85; composer = null;
+  if (Q.level === 2) Promise.all([import('three/addons/postprocessing/EffectComposer.js'), import('three/addons/postprocessing/RenderPass.js'), import('three/addons/postprocessing/UnrealBloomPass.js'), import('three/addons/postprocessing/OutputPass.js')]).then(([a, b, c, d]) => {
+    if (Q.level !== 2) return;
+    const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: 4 });
+    const comp = new a.EffectComposer(renderer, rt); comp.addPass(new b.RenderPass(scene, camera));
+    bloom = new c.UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), .3, .5, 1.08); comp.addPass(bloom); comp.addPass(new d.OutputPass());
+    comp.setPixelRatio(renderer.getPixelRatio()); comp.setSize(innerWidth, innerHeight); composer = comp;
+  }).catch(e => console.warn('post-processing unavailable', e));
+}
+// Reflections: photograph the finished room from the player's head once, and let every surface reflect that picture.
+function captureEnvironment() {
+  if (envRT) { envRT.dispose(); envRT = null; } scene.environment = null;
+  if (!Q.level) return;
+  if (!cubeCam) { cubeRT = new THREE.WebGLCubeRenderTarget(Q.level === 2 ? 256 : 128, { type: THREE.HalfFloatType }); cubeCam = new THREE.CubeCamera(.1, 3000, cubeRT); cubeCam.position.set(0, 1.5, 0); scene.add(cubeCam); }
+  const tv = term.visible, fv = fade.visible, sh = renderer.shadowMap.enabled; term.visible = false; fade.visible = false; label.visible = false;
+  cubeCam.update(renderer, scene); envRT = pmrem.fromCubemap(cubeRT.texture); scene.environment = envRT.texture;
+  term.visible = tv; fade.visible = fv; renderer.shadowMap.enabled = sh;
+}
 const space = buildSpace(env); scene.add(space.group);
+setBakedCallback(rid => { if (S && rid === S.room) captureEnvironment(); });   // re-photograph the room once its baked light has arrived
 let room = null;                         // {group, clues, hatch, update}
 let interactives = [];                   // {obj, kind, pid}
 
@@ -210,7 +238,7 @@ function drawTracker(g) {
     x += w + 10;
   }
   g.font = '600 22px system-ui,sans-serif'; g.fillStyle = '#9fb0c3'; g.textAlign = 'right';
-  g.fillText(MODE === 'instructor' ? 'INSTRUCTOR' : solvedIn(S.room) + '/' + roomPuzzles(S.room).length + ' HATCH', TW - 28, 56); g.textAlign = 'left';
+  g.fillText(MODE === 'instructor' ? 'INSTRUCTOR ' + ($('#fps').textContent || '') : solvedIn(S.room) + '/' + roomPuzzles(S.room).length + ' HATCH', TW - 28, 56); g.textAlign = 'left';
 }
 function drawSchema(g, x, y, w) {
   g.font = '700 20px system-ui,sans-serif'; g.fillStyle = '#9fb0c3'; g.fillText('STATION DATABASE', x, y); y += 12;
@@ -421,10 +449,10 @@ let moving = false;
 async function goRoom(rid, instant) {
   if (moving) return; moving = true;
   if (!instant) { sfx('whoosh'); await fadeTo(1); }
-  if (room) { scene.remove(room.group); room.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m.map && !m.map.userData.shared) m.map.dispose(); m.dispose(); }); }); }
+  if (room) { scene.remove(room.group); room.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { for (const k of ['map', 'normalMap', 'roughnessMap', 'lightMap']) if (m[k] && !m[k].userData.shared) m[k].dispose(); m.dispose(); }); }); }
   env.anim = [];
   S.room = rid; save();
-  room = buildRoom(rid, env); scene.add(room.group); space.face(room.earth || 0); if (MODE === 'instructor') $('#jump').value = rid;
+  room = buildRoom(rid, env); scene.add(room.group); space.face(room.earth || 0); room.group.updateMatrixWorld(true); space.group.updateMatrixWorld(true); captureEnvironment(); if (MODE === 'instructor') $('#jump').value = rid;
   interactives = [];
   for (const p of roomPuzzles(rid)) {
     const obj = room.clues[p.obj]; if (!obj) { console.warn('missing clue object', p.obj); continue; }
@@ -456,7 +484,7 @@ function addBeacon(it) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: 0xffb347, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   s.scale.setScalar(0.34); m.add(s);
   const b = it.obj.userData.beacon; if (b) m.position.copy(b); else { const box = new THREE.Box3().setFromObject(it.obj); it.obj.worldToLocal(m.position.set((box.min.x + box.max.x) / 2, box.max.y + .06, (box.min.z + box.max.z) / 2)); }
-  it.obj.add(m); it.beacon = m; it.glow = s; it.phase = Math.random() * 6;
+  m.userData.keep = true; it.obj.add(m); it.beacon = m; it.glow = s; it.phase = Math.random() * 6;
 }
 function setBeacon(it, st) { const c = st === 'solved' ? 0x5fe3a1 : 0xffb347; it.beacon.material.color.setHex(c); it.glow.material.color.setHex(c); it.solved = st === 'solved'; }
 
@@ -531,9 +559,9 @@ async function enterXR(mode) {
   try {
     const session = await navigator.xr.requestSession(mode, { requiredFeatures: ['local-floor'], optionalFeatures: ['hand-tracking'] });
     arMode = mode === 'immersive-ar';
-    renderer.xr.setReferenceSpaceType('local-floor');
+    renderer.xr.setReferenceSpaceType('local-floor'); try { renderer.xr.setFramebufferScaleFactor(Q.level === 2 ? 1.3 : 1); } catch (e) {}
     await renderer.xr.setSession(session);
-    try { renderer.xr.setFoveation(1); } catch (e) {}
+    try { renderer.xr.setFoveation(Q.level === 2 ? 0 : 1); } catch (e) {}
     inXR = true; beginPlay(); kbd.visible = T.kb = !arMode; port.visible = arMode; drawKbd(); $('#hover').classList.add('hidden'); refresh();
     session.addEventListener('end', () => { inXR = false; arMode = false; kbd.visible = false; port.visible = false; label.visible = false; camera.position.set(0, 1.6, 0); resize(); refresh(); });
   } catch (e) { console.error(e); hint('The headset session could not start: ' + esc(e.message || e), 8000); }
@@ -616,8 +644,11 @@ async function boot() {
     $('#jump').classList.remove('hidden'); $('#dSol').classList.remove('hidden'); $('#verify').classList.remove('hidden');
     $('#jump').innerHTML = CFG.rooms.map(r => `<option value="${r.id}">${r.bonus ? 'Bonus' : 'Module ' + r.n}: ${esc(r.name)}</option>`).join('');
     $('#jump').onchange = e => goRoom(e.target.value);
-    window.__lab = { goRoom, loadPuzzle, run, T, S, look: (y, p) => { yaw = y; pitch = p; }, reset: () => { localStorage.removeItem(KEY); location.reload(); } };
+    window.__lab = { goRoom, loadPuzzle, run, T, S, room: () => room, look: (y, p) => { yaw = y; pitch = p; }, reset: () => { localStorage.removeItem(KEY); location.reload(); } };
   }
+  $('#gfx').value = gfxPref; $('#gfx').onchange = async e => { gfxPref = e.target.value; try { localStorage.setItem('meridian.gfx', gfxPref); } catch (x) {} setQuality(levelOf(gfxPref)); applyQuality(); await goRoom(S.room, true); };
+  if (MODE === 'instructor') $('#fps').classList.remove('hidden');
+  applyQuality(); await loadManifest();
   showBriefing(); drawKbd();
   $('#btnScreen').onclick = () => { ensureAudio(); beginPlay(); };
   $('#btnVR').onclick = $('#btnVR2').onclick = () => enterXR('immersive-vr'); $('#btnAR').onclick = () => enterXR('immersive-ar');
@@ -630,9 +661,10 @@ async function boot() {
 }
 
 /* ------------------------------------------------------------------ frame loop */
-const clock = new THREE.Clock(); let blink = 0; const _v = new THREE.Vector3();
+const clock = new THREE.Clock(); let blink = 0; const _v = new THREE.Vector3(); let fpsN = 0, fpsT = 0;
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), .1), t = clock.elapsedTime;
+  fpsN++; if (t - fpsT >= 1) { if (MODE === 'instructor') $('#fps').textContent = Math.round(fpsN / (t - fpsT)) + ' fps · gfx ' + ['low', 'medium', 'high'][Q.level]; fpsN = 0; fpsT = t; }
   if (!renderer.xr.isPresenting) {
     const sp = 1.4 * dt; if (held.has('ArrowLeft')) yaw -= sp; if (held.has('ArrowRight')) yaw += sp; if (held.has('ArrowUp')) pitch = Math.min(1.5, pitch + sp); if (held.has('ArrowDown')) pitch = Math.max(-1.5, pitch - sp);
     camera.rotation.set(pitch, -yaw, 0);
@@ -653,5 +685,5 @@ renderer.setAnimationLoop(() => {
   const o = fade.material.opacity; if (o !== fadeTarget) { const n = fadeTarget > o ? Math.min(fadeTarget, o + dt * 2.6) : Math.max(fadeTarget, o - dt * 2.2); fade.material.opacity = n; if (n === fadeTarget && fadeCb) { const cb = fadeCb; fadeCb = null; cb(); } }
   fade.visible = fade.material.opacity > 0.001;
   (renderer.xr.isPresenting ? renderer.xr.getCamera() : camera).getWorldPosition(_v); fade.position.copy(_v);
-  renderer.render(scene, camera);
+  if (composer && !renderer.xr.isPresenting) composer.render(dt); else renderer.render(scene, camera);
 });
