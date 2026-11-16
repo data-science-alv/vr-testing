@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Lockdown on Meridian Station · VR SQL Escape Room</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<canvas id="view" aria-label="3D view of the station module"></canvas>
+
+<!-- access phrase -->
+<div id="gate" class="cover">
+  <div class="card narrow">
+    <p class="eyebrow" id="gCourse">Database Lab · VR Escape Room</p>
+    <h1 id="gTitle">Lockdown on Meridian Station</h1>
+    <p class="lede">Enter the access phrase your instructor gave you at the start of class.</p>
+    <form id="gForm" autocomplete="off">
+      <label for="gPw" class="sr">Access phrase</label>
+      <input type="password" id="gPw" placeholder="Access phrase" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button type="submit" id="gGo">Enter</button>
+    </form>
+    <p class="msg" id="gMsg" role="status"></p>
+    <p class="note">The phrase is case-sensitive. If you were in class and missed it, ask a neighbour before asking the instructor.</p>
+  </div>
+</div>
+
+<!-- briefing / landing -->
+<div id="landing" class="cover hidden">
+  <div class="card">
+    <p class="eyebrow" id="lKick"></p>
+    <h1 id="lTitle"></h1>
+    <div id="lStory"></div>
+    <h2>How this works</h2>
+    <ol id="lHow"></ol>
+    <div class="dbline"><span class="dot busy" id="dbDot"></span><span id="dbTxt">Starting the station database…</span></div>
+    <div class="row">
+      <button class="primary" id="btnScreen" disabled>Play on this screen</button>
+      <button class="primary alt hidden" id="btnVR" disabled>Enter VR headset mode</button>
+      <button class="ghost hidden" id="btnAR" disabled title="Experimental: keeps a window onto your real desk so you can see a physical keyboard">Enter VR with keyboard window</button>
+    </div>
+    <p class="note" id="lNote">No headset? “Play on this screen” gives you the same room: drag to look around, click to interact.</p>
+  </div>
+</div>
+
+<!-- status tracker -->
+<header id="bar" class="hidden">
+  <div class="brand"><span class="eyebrow" id="bCourse"></span><b id="bRoom"></b></div>
+  <nav id="track" aria-label="Status tracker"></nav>
+  <div class="right">
+    <span id="clock" title="Time since you started">00:00</span>
+    <select id="jump" class="hidden" title="Instructor: jump to a module"></select>
+    <button class="ghost sm" id="btnMute" title="Sound on/off">Sound: on</button>
+    <button class="ghost sm" id="btnHelp">How to play</button>
+    <button class="ghost sm hidden" id="btnVR2">Enter VR</button>
+    <button class="sm" id="btnReport">Progress report</button>
+  </div>
+</header>
+
+<div id="hint" class="hidden" role="status"></div>
+<div id="hover" class="hidden"></div>
+
+<!-- terminal dock (screen mode) -->
+<aside id="dock" class="hidden" aria-label="Terminal">
+  <div class="dhead">
+    <div><span class="eyebrow" id="dKick">VESTA terminal</span><h3 id="dTitle"></h3></div>
+    <button class="ghost sm" id="dClose" title="Hide the terminal">Hide</button>
+  </div>
+  <div class="dbody">
+    <p class="clue" id="dClue"></p>
+    <p class="task" id="dTask"></p>
+    <label class="lbl" for="dSql">Your SQL</label>
+    <textarea id="dSql" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="SELECT ..."></textarea>
+    <div class="row">
+      <button class="primary" id="dRun">Run ▶</button>
+      <button class="ghost" id="dClear">Clear</button>
+      <button class="ghost hidden" id="dSol">Show solution</button>
+      <span class="kbd">Ctrl/⌘ + Enter</span>
+    </div>
+    <div class="fb" id="dFb" role="status"></div>
+    <div class="res" id="dRes"></div>
+    <details id="dSchema" open><summary>Station database</summary><div id="dSchemaIn"></div></details>
+  </div>
+</aside>
+<button id="dockTab" class="hidden">Terminal</button>
+
+<dialog id="dlgReport">
+  <h3>Progress report</h3>
+  <p class="small" id="rWhen"></p>
+  <ul id="rList"></ul>
+  <div class="codebox"><span class="lbl">Verification code</span><div id="rCode">…</div></div>
+  <p class="small">No names or personal information are recorded. Download the PDF and upload it to the assignment in Canvas. Each report gets its own code.</p>
+  <div class="row end"><button class="ghost" id="rClose">Close</button><button class="primary" id="rPdf">Download PDF</button></div>
+  <div id="verify" class="hidden">
+    <hr><h4>Instructor: verify a report</h4>
+    <input id="vRec" placeholder="Record line from the PDF"><input id="vCode" placeholder="Verification code">
+    <div class="row"><button class="ghost" id="vGo">Verify</button><span id="vOut"></span></div>
+  </div>
+</dialog>
+
+<dialog id="dlgMsg"><div id="mBody"></div><div class="row end"><button class="primary" id="mOk">Continue</button></div></dialog>
+
+<script src="vendor/jspdf.umd.min.js" defer></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
